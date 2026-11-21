@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PLMUN Campus Route Finder — an A* problem-solving agent that computes optimal walking routes across a modelled campus graph.">
+  <title>PLMUN Campus Route Finder · A* Search Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-route" viewBox="0 0 24 24">
+      <circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/>
+      <path d="M8.5 18h4a4 4 0 0 0 0-8h-1a4 4 0 0 1 0-8"/>
+    </symbol>
+    <symbol id="icon-swap" viewBox="0 0 24 24">
+      <path d="M4 8h14m0 0-3.5-3.5M18 8l-3.5 3.5M20 16H6m0 0 3.5-3.5M6 16l3.5 3.5"/>
+    </symbol>
+    <symbol id="icon-target" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+    </symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24">
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>
+    </symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+    </symbol>
+    <symbol id="icon-info" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="m5 12.5 4.5 4.5L19 7.5"/>
+    </symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24">
+      <path d="M12 4 2.8 20h18.4L12 4Z"/><path d="M12 10v4m0 3h.01"/>
+    </symbol>
+    <symbol id="icon-spark" viewBox="0 0 24 24">
+      <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z"/>
+    </symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24">
+      <path d="M20 11a8 8 0 0 0-13.7-5.3L4 8m0-5v5h5M4 13a8 8 0 0 0 13.7 5.3L20 16m0 5v-5h-5"/>
+    </symbol>
+  </svg>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"><svg><use href="#icon-route"></use></svg></span>
+        <span class="brand-text">
+          <strong>PLMUN Route Finder</strong>
+          <small>AI Problem-Solving Agent · CSELEC3</small>
+        </span>
+      </div>
+      <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to dark theme" aria-pressed="false">
+        <svg aria-hidden="true"><use id="theme-icon" href="#icon-moon"></use></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="hero" aria-labelledby="page-title">
+    <div class="hero-inner">
+      <div>
+        <p class="eyebrow"><svg aria-hidden="true"><use href="#icon-spark"></use></svg> Heuristic graph search, live in your browser</p>
+        <h1 id="page-title">Find the shortest walk across campus.</h1>
+        <p class="hero-copy">Choose a starting point and a destination. The A* agent evaluates <code>f(n) = g(n) + h(n)</code> over the campus graph and returns an optimal, turn-by-turn route.</p>
+      </div>
+      <div class="hero-facts" aria-label="Agent characteristics">
+        <span>A* search</span><span>Euclidean heuristic</span><span>Weighted graph</span>
+      </div>
+    </div>
+  </section>
+
+  <main class="app-grid">
+    <aside class="card controls" aria-labelledby="controls-title">
+      <div class="section-heading">
+        <span class="heading-icon" aria-hidden="true"><svg><use href="#icon-target"></use></svg></span>
+        <div>
+          <h2 id="controls-title">Plan your route</h2>
+          <p>Set two states in the search space.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="start-select">Initial state · Start</label>
+        <select id="start-select"></select>
+      </div>
+
+      <div class="swap-row">
+        <button id="swap-button" class="icon-button swap-button" type="button" aria-label="Swap start and destination">
+          <svg aria-hidden="true"><use href="#icon-swap"></use></svg>
+        </button>
+        <div class="field field-grow">
+          <label for="goal-select">Goal state · Destination</label>
+          <select id="goal-select"></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field-label" id="mode-label">Clicking the map sets</span>
+        <div class="segmented" role="group" aria-labelledby="mode-label">
+          <button type="button" class="segment" data-mode="start" aria-pressed="true">Start</button>
+          <button type="button" class="segment" data-mode="goal" aria-pressed="false">Destination</button>
+        </div>
+      </div>
+
+      <fieldset class="obstacles">
+        <legend>Path conditions</legend>
+        <p class="hint">Block a walkway to see the agent replan around it.</p>
+        <div id="obstacle-list" class="obstacle-list"></div>
+      </fieldset>
+
+      <div class="add-node-panel">
+        <button id="add-node-btn" class="button button-ghost" type="button" aria-pressed="false">
+          <svg aria-hidden="true"><use href="#icon-spark"></use></svg> Add node
+        </button>
+        <div id="add-node-form" class="add-node-form" style="display:none;">
+          <div class="field field-grow">
+            <label for="add-node-name">Node name</label>
+            <input id="add-node-name" type="text" placeholder="e.g. New Building">
+          </div>
+          <div class="field field-grow">
+            <label for="add-node-type">Type</label>
+            <select id="add-node-type">
+              <option value="building">Building</option>
+              <option value="park">Park / Garden</option>
+              <option value="facility">Facility</option>
+              <option value="intersection">Intersection</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button id="edit-toggle" class="button button-ghost" type="button" aria-pressed="false">
+        <svg aria-hidden="true"><use href="#icon-spark"></use></svg> Edit campus
+      </button>
+
+      <div id="editor-panel" class="editor-panel" style="display:none;">
+        <div id="editor-body"></div>
+      </div>
+
+      <div class="actions">
+        <button id="find-button" class="button button-primary" type="button">
+          <svg aria-hidden="true"><use href="#icon-route"></use></svg> Find optimal route
+        </button>
+        <button id="clear-button" class="button button-ghost" type="button">
+          <svg aria-hidden="true"><use href="#icon-refresh"></use></svg> Clear
+        </button>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <section class="card map-card" aria-labelledby="map-title">
+        <div class="card-header">
+          <div>
+            <h2 id="map-title">Campus graph</h2>
+            <p class="card-subtitle">Nodes are locations; edges are weighted walking paths.</p>
+          </div>
+          <ul class="legend" aria-label="Map legend">
+            <li><span class="legend-dot legend-start"></span>Start</li>
+            <li><span class="legend-dot legend-goal"></span>Goal</li>
+            <li><span class="legend-line legend-route"></span>Optimal path</li>
+            <li><span class="legend-line legend-blocked"></span>Blocked</li>
+            <li><span class="legend-box legend-building"></span>Building</li>
+            <li><span class="legend-box legend-park"></span>Park / Garden</li>
+          </ul>
+        </div>
+
+        <div class="map-shell">
+          <svg id="map-svg" class="map-svg" viewBox="0 0 1000 509" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+            <g id="edge-layer"></g>
+            <g id="route-layer"></g>
+          </svg>
+          <div id="node-layer" class="node-layer"></div>
+        </div>
+        <p id="map-hint" class="map-hint">Tip: click a location on the map to set the start.</p>
+      </section>
+
+      <section class="card results-card" aria-labelledby="results-title">
+        <div class="card-header">
+          <div>
+            <h2 id="results-title">Route result</h2>
+            <p class="card-subtitle">Reconstructed from parent pointers after the goal is popped.</p>
+          </div>
+          <span id="status-badge" class="status-badge status-idle" aria-live="polite">Waiting for a route</span>
+        </div>
+        <div id="results" class="results" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+
+  <section class="wrap">
+    <details class="card explainer">
+      <summary>
+        <svg aria-hidden="true"><use href="#icon-info"></use></svg>
+        <span>How the problem-solving agent works</span>
+        <span class="summary-hint">Algorithm, modules &amp; data note</span>
+      </summary>
+      <div class="explainer-body">
+        <div class="explain-card">
+          <h3>Evaluation function</h3>
+          <p class="formula">f(n) = g(n) + h(n)</p>
+          <p><strong>g(n)</strong> is the accumulated walking distance from the start. <strong>h(n)</strong> is the straight-line Euclidean estimate to the goal. The open list always expands the lowest <strong>f(n)</strong> first.</p>
+        </div>
+        <div class="explain-card">
+          <h3>Search cycle</h3>
+          <ol>
+            <li>Load the campus graph and initialise the open list.</li>
+            <li>Pop the lowest-cost node and add it to the closed list.</li>
+            <li>Relax each unblocked neighbour; update parent, g and f.</li>
+            <li>Stop at the goal, then reconstruct the path backwards.</li>
+          </ol>
+        </div>
+        <div class="explain-card">
+          <h3>Modules in this build</h3>
+          <ul>
+            <li><strong>Location management</strong> — node metadata &amp; coordinates</li>
+            <li><strong>Path &amp; obstacle management</strong> — weighted edges &amp; closures</li>
+            <li><strong>Route search engine</strong> — A* with a binary min-heap</li>
+            <li><strong>Route presentation</strong> — distance, sequence &amp; directions</li>
+          </ul>
+        </div>
+      </div>
+      <p class="data-note" id="heuristic-check">Checking heuristic admissibility…</p>
+      <p class="data-note"><strong>Data note:</strong> the campus layout here is a schematic teaching dataset built from the proposal's examples (Main Gate, Building A, Library, and so on). It is not a surveyed map of PLMUN. Distances are modelled in metres from node coordinates and walking-path detour factors.</p>
+    </details>
+  </section>
+
+  <footer class="site-footer">
+    <p>PLMUN Campus Route Finder · Designed and developed as a problem-solving agent for CSELEC3.</p>
+  </footer>
+
+  <script src="campus-data.js"></script>
+  <script src="astar.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
