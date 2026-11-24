@@ -65,6 +65,18 @@ test("blocked walkways are avoided while a valid alternative is used", () => {
   }
 });
 
+test("student-center to rlrc-building finds alternative via east perimeter when central plaza walkway is blocked", () => {
+  const obs = Data.obstacles.find(o => o.id === "plaza-walkway-east");
+  assert.ok(obs, "plaza-walkway-east obstacle definition exists");
+  const blocked = new Set(obs.edgeIds);
+  const result = Agent.aStar(graph, "student-center", "rlrc-building", { blocked: blocked });
+  assert.equal(result.found, true, "alternative route must be found");
+  assert.ok(result.path.includes("int-7"), "path should route around through Junction 7");
+  assert.ok(result.path.includes("conn-rlrc-building"), "path must enter RLRC from the top gateway");
+  assert.ok(!result.path.includes("int-13"), "path must not use blocked Central Plaza walkway");
+  assert.equal(pathCost(result.path), result.cost);
+});
+
 test("disconnecting every path around a location reports no route", () => {
   const dests = getDestinations();
   const start = dests[0];
