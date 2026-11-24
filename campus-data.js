@@ -13,7 +13,7 @@
  * B: Covered Court
  * C: Main Building
  * D: Admin Building
- * E: RLRC Building
+ * E: RLRC Building (with North Plaza Gateway & South Loop Access)
  * F: Gazebo
  * G: Centennial Park
  * H: Serenity Garden
@@ -75,26 +75,16 @@
     return Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
   }
 
-  function nearestPointOnSegments(point, segments) {
-    var best = null;
-    var bestDist = Infinity;
-    var bestSegment = null;
-    segments.forEach(function (s) {
-      var x1 = s.p1[0], y1 = s.p1[1];
-      var x2 = s.p2[0], y2 = s.p2[1];
-      var dx = x2 - x1, dy = y2 - y1;
-      var len2 = dx * dx + dy * dy;
-      var t = ((point[0] - x1) * dx + (point[1] - y1) * dy) / len2;
-      t = Math.max(0, Math.min(1, t));
-      var proj = [Math.round(x1 + t * dx), Math.round(y1 + t * dy)];
-      var d = dist(point, proj);
-      if (d < bestDist) {
-        bestDist = d;
-        best = proj;
-        bestSegment = s;
-      }
-    });
-    return { point: best, segment: bestSegment };
+  function projectOnSegment(point, s) {
+    var x1 = s.p1[0], y1 = s.p1[1];
+    var x2 = s.p2[0], y2 = s.p2[1];
+    var dx = x2 - x1, dy = y2 - y1;
+    var len2 = dx * dx + dy * dy;
+    var t = ((point[0] - x1) * dx + (point[1] - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    var proj = [Math.round(x1 + t * dx), Math.round(y1 + t * dy)];
+    var d = dist(point, proj);
+    return { proj: proj, t: t, d: d };
   }
 
   // Intersections of road network
@@ -130,53 +120,78 @@
     return a < b ? a + "|" + b : b + "|" + a;
   }
 
-  // Build raw edges for roads
-  var rawEdges = [];
-  roadSegments.forEach(function (seg) {
-    rawEdges.push({
-      a: seg.aId,
-      b: seg.bId,
-      label: seg.label,
-      detour: 1.02,
-      type: seg.type
+  // Find nearest segment for each destination and create access connectors
+  var segConnectors = Array.from({ length: roadSegments.length }, function () { return []; });
+
+  destinations.forEach(function (dest) {
+    var bestDist = Infinity;
+    var bestSegIdx = -1;
+    var bestT = 0;
+    var bestProj = null;
+
+    roadSegments.forEach(function (s, idx) {
+      var p = projectOnSegment([dest.x, dest.y], s);
+      if (p.d < bestDist) {
+        bestDist = p.d;
+        bestSegIdx = idx;
+        bestT = p.t;
+        bestProj = p.proj;
+      }
+    });
+
+    // For RLRC Building (E), position the top gateway at [780, 256] along Central Plaza Walkway (East)
+    // so the Central Plaza approach [703, 256] -> [780, 256] and East Perimeter approach [780, 256] -> [950, 256]
+    // form distinct, visible walkway segments. RLRC access is strictly from the top part.
+    if (dest.id === "rlrc-building") {
+      bestSegIdx = 14;
+      bestProj = [780, 256];
+      bestT = (780 - 703) / (950 - 703);
+    }
+
+    var connId = "conn-" + dest.id;
+    allNodes.push({ id: connId, name: dest.name + " Gateway", type: "connector", x: bestProj[0], y: bestProj[1] });
+
+    segConnectors[bestSegIdx].push({
+      destId: dest.id,
+      connId: connId,
+      proj: bestProj,
+      t: bestT
     });
   });
 
-  // Connect each destination node cleanly to the closest road/walkway network point
+  // Build raw edges: properly subdivide road segments so intermediate connectors are inline
+  var rawEdges = [];
+
+  roadSegments.forEach(function (seg, sIdx) {
+    var pts = [{ id: seg.aId, t: 0, pt: seg.p1 }];
+    segConnectors[sIdx].slice().sort(function (a, b) { return a.t - b.t; }).forEach(function (c) {
+      pts.push({ id: c.connId, t: c.t, pt: c.proj });
+    });
+    pts.push({ id: seg.bId, t: 1, pt: seg.p2 });
+
+    for (var i = 0; i < pts.length - 1; i++) {
+      if (pts[i].id !== pts[i + 1].id) {
+        rawEdges.push({
+          a: pts[i].id,
+          b: pts[i + 1].id,
+          label: seg.label,
+          detour: 1.02,
+          type: seg.type,
+          segmentIndex: sIdx
+        });
+      }
+    }
+  });
+
+  // Connect destination nodes to their gateway connectors
   destinations.forEach(function (dest) {
-    var nearest = nearestPointOnSegments([dest.x, dest.y], roadSegments);
-    if (!nearest.point) return;
-
-    var connId = "conn-" + dest.id;
-    allNodes.push({ id: connId, name: dest.name + " Gateway", type: "connector", x: nearest.point[0], y: nearest.point[1] });
-
-    // Link connector to destination
     rawEdges.push({
       a: dest.id,
-      b: connId,
+      b: "conn-" + dest.id,
       label: "Access to " + dest.name,
       detour: 1.01,
       type: "connector"
     });
-
-    // Link connector into nearest road segment endpoints
-    var seg = nearest.segment;
-    if (seg) {
-      rawEdges.push({
-        a: connId,
-        b: seg.aId,
-        label: seg.label + " Link",
-        detour: 1.02,
-        type: seg.type
-      });
-      rawEdges.push({
-        a: connId,
-        b: seg.bId,
-        label: seg.label + " Link",
-        detour: 1.02,
-        type: seg.type
-      });
-    }
   });
 
   var nodeById = new Map(allNodes.map(function (n) { return [n.id, n]; }));
@@ -197,6 +212,7 @@
         straightDistance: Math.ceil(straight),
         cost: Math.ceil(straight * d),
         type: e.type,
+        segmentIndex: e.segmentIndex != null ? e.segmentIndex : null,
         obstacleId: null
       };
     });
@@ -225,26 +241,74 @@
   var edgeById = graphEdges.edgeById;
   var adjacency = graphEdges.adjacency;
 
-  // Obstacle management
-  var obstacles = [
-    { id: "central-crosswalk", label: "Central Courtyard Crosswalk Maintenance", edgeId: edgeId(roadSegments[15].aId, roadSegments[15].bId) }
-  ];
+  // Obstacle definitions covering physical walkway and road closures
+  function getSegmentEdgeIds(segIdx) {
+    return edges.filter(function (e) { return e.segmentIndex === segIdx; }).map(function (e) { return e.id; });
+  }
 
-  // Obstacle options on alternate paths
-  [0, 3, 7, 11, 13].forEach(function (idx) {
-    if (roadSegments[idx]) {
-      var idVal = edgeId(roadSegments[idx].aId, roadSegments[idx].bId);
-      if (!obstacles.some(function (o) { return o.edgeId === idVal; })) {
-        obstacles.push({ id: "obs-" + idx, label: "Under Construction: " + roadSegments[idx].label, edgeId: idVal });
-      }
+  var obstacles = [
+    {
+      id: "north-walkway-west",
+      label: "Block Walkway: North Walkway (Main Bldg)",
+      edgeId: getSegmentEdgeIds(11)[0],
+      edgeIds: getSegmentEdgeIds(11)
+    },
+    {
+      id: "north-walkway-east",
+      label: "Block Walkway: North Walkway (Admin Bldg)",
+      edgeId: getSegmentEdgeIds(12)[0],
+      edgeIds: getSegmentEdgeIds(12)
+    },
+    {
+      id: "central-crosswalk",
+      label: "Block Walkway: Central Courtyard Crosswalk",
+      edgeId: getSegmentEdgeIds(15)[0],
+      edgeIds: getSegmentEdgeIds(15)
+    },
+    {
+      id: "plaza-walkway-west",
+      label: "Block Walkway: Central Plaza (West)",
+      edgeId: getSegmentEdgeIds(13)[0],
+      edgeIds: getSegmentEdgeIds(13)
+    },
+    {
+      id: "plaza-walkway-east",
+      label: "Block Walkway: Central Plaza (RLRC Bldg)",
+      edgeId: "conn-rlrc-building|int-13",
+      edgeIds: ["conn-rlrc-building|int-13"]
+    },
+    {
+      id: "west-east-entrance",
+      label: "Under Construction: West Entrance Road",
+      edgeId: getSegmentEdgeIds(1)[0],
+      edgeIds: getSegmentEdgeIds(1)
+    },
+    {
+      id: "north-boulevard",
+      label: "Under Construction: North Boulevard Road",
+      edgeId: getSegmentEdgeIds(3)[0],
+      edgeIds: getSegmentEdgeIds(3)
+    },
+    {
+      id: "south-loop",
+      label: "Under Construction: South Loop Road",
+      edgeId: getSegmentEdgeIds(7)[0],
+      edgeIds: getSegmentEdgeIds(7)
     }
-  });
+  ];
 
   function recalcCosts() {
     graphEdges = rebuildEdges();
     edges = graphEdges.edges;
     edgeById = graphEdges.edgeById;
     adjacency = graphEdges.adjacency;
+
+    // Refresh obstacle edge references
+    obstacles.forEach(function (o) {
+      if (o.edgeIds && o.edgeIds.length) {
+        o.edgeId = o.edgeIds[0];
+      }
+    });
   }
 
   function addNode(id, name, x, y, type) {
@@ -299,7 +363,12 @@
     if (!edge) return false;
     if (blocked) {
       if (!obstacles.some(function (o) { return o.edgeId === edgeIdValue; })) {
-        obstacles.push({ id: "blocked-" + edgeIdValue.replace(/\|/g, "-"), label: "Blocked: " + edge.label, edgeId: edgeIdValue });
+        obstacles.push({
+          id: "blocked-" + edgeIdValue.replace(/\|/g, "-"),
+          label: "Blocked: " + edge.label,
+          edgeId: edgeIdValue,
+          edgeIds: [edgeIdValue]
+        });
       }
     } else {
       obstacles = obstacles.filter(function (o) { return o.edgeId !== edgeIdValue; });

@@ -234,8 +234,15 @@
   function blockedEdges() {
     var chosen = new Set();
     els.obstacles.querySelectorAll("input:checked").forEach(function (input) { chosen.add(input.value); });
-    return new Set(Data.obstacles.filter(function (item) { return chosen.has(item.id); })
-      .map(function (item) { return item.edgeId; }));
+    var blocked = new Set();
+    Data.obstacles.filter(function (item) { return chosen.has(item.id); }).forEach(function (item) {
+      if (item.edgeIds && item.edgeIds.length) {
+        item.edgeIds.forEach(function (id) { blocked.add(id); });
+      } else if (item.edgeId) {
+        blocked.add(item.edgeId);
+      }
+    });
+    return blocked;
   }
 
   function syncBlockedEdges(blocked) {
